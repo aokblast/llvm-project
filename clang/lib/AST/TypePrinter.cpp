@@ -529,7 +529,7 @@ void TypePrinter::printConstantArrayAfter(const ConstantArrayType *T,
     OS << ' ';
   }
 
-  if (T->getSizeModifier() == ArrayType::Static)
+  if (T->getSizeModifier() == ArraySizeModifier::Static)
     OS << "static ";
 
   OS << T->getSize().getZExtValue() << ']';
@@ -562,9 +562,9 @@ void TypePrinter::printVariableArrayAfter(const VariableArrayType *T,
     OS << ' ';
   }
 
-  if (T->getSizeModifier() == VariableArrayType::Static)
+  if (T->getSizeModifier() == ArraySizeModifier::Static)
     OS << "static ";
-  else if (T->getSizeModifier() == VariableArrayType::Star)
+  else if (T->getSizeModifier() == ArraySizeModifier::Star)
     OS << '*';
 
   if (T->getSizeExpr())
@@ -1043,6 +1043,9 @@ void TypePrinter::printFunctionAfter(const FunctionType::ExtInfo &Info,
       break;
     case CC_PreserveAll:
       OS << " __attribute__((preserve_all))";
+      break;
+    case CC_M68kRTD:
+      OS << " __attribute__((m68k_rtd))";
       break;
     }
   }
@@ -1878,6 +1881,9 @@ void TypePrinter::printAttributedAfter(const AttributedType *T,
 
   case attr::PreserveAll:
     OS << "preserve_all";
+    break;
+  case attr::M68kRTD:
+    OS << "m68k_rtd";
     break;
   case attr::NoDeref:
     OS << "noderef";

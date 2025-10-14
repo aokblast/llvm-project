@@ -499,8 +499,9 @@ static void inferAttribute(Function *F, unsigned AttrIndex,
 }
 
 void SCCPSolver::inferReturnAttributes() const {
-  for (const auto &[F, ReturnValue] : getTrackedRetVals())
-    inferAttribute(F, AttributeList::ReturnIndex, ReturnValue);
+  for (const auto &[F, ReturnValues] : getTrackedRetVals())
+    for (const auto &[CallSite, ReturnValue] : ReturnValues)
+      inferAttribute(F, AttributeList::ReturnIndex, ReturnValue);
 }
 
 void SCCPSolver::inferArgAttributes() const {
@@ -539,7 +540,8 @@ class SCCPInstVisitor : public InstVisitor<SCCPInstVisitor> {
   /// TrackedRetVals - If we are tracking arguments into and the return
   /// value out of a function, it will have an entry in this map, indicating
   /// what the known return value for the function is.
-  MapVector<Function *, ValueLatticeElement> TrackedRetVals;
+  MapVector<Function *, MapVector<CallBase *, ValueLatticeElement>>
+      TrackedRetVals;
 
   /// TrackedMultipleRetVals - Same as TrackedRetVals, but used for functions
   /// that return multiple values.
@@ -714,7 +716,7 @@ private:
       if (auto *RetInst = dyn_cast<ReturnInst>(Inst)) {
         Function *F = RetInst->getParent()->getParent();
         if (auto It = TrackedRetVals.find(F); It != TrackedRetVals.end()) {
-          It->second = ValueLatticeElement();
+          It->second[Call] = ValueLatticeElement();
           V = F;
         } else if (MRVFunctionsTracked.count(F)) {
           auto *STy = cast<StructType>(F->getReturnType());
@@ -952,7 +954,8 @@ public:
     return I->second;
   }
 
-  const MapVector<Function *, ValueLatticeElement> &getTrackedRetVals() const {
+  const MapVector<Function *, MapVector<CallBase *, ValueLatticeElement>> &
+  getTrackedRetVals() const {
     return TrackedRetVals;
   }
 
@@ -1438,8 +1441,12 @@ void SCCPInstVisitor::visitReturnInst(ReturnInst &I) {
   // If we are tracking the return value of this function, merge it in.
   if (!TrackedRetVals.empty() && !ResultOp->getType()->isStructTy()) {
     auto TFRVI = TrackedRetVals.find(F);
-    if (TFRVI != TrackedRetVals.end()) {
-      mergeInValue(TFRVI->second, F, getValueState(ResultOp));
+    if (TFRVI == TrackedRetVals.end())
+      return;
+
+    if (auto TFCVI = TFRVI->second.find(dyn_cast<CallBase>(ResultOp));
+        TFCVI != TFRVI->second.end()) {
+      mergeInValue(TFCVI->second, F, getValueState(ResultOp));
       return;
     }
   }
@@ -2121,7 +2128,8 @@ void SCCPInstVisitor::handleCallResult(CallBase &CB) {
       return handleCallOverdefined(CB); // Not tracking this callee.
 
     // If so, propagate the return value of the callee into this call result.
-    mergeInValue(&CB, TFRVI->second, getMaxWidenStepsOpts());
+    if (auto TFCVI = TFRVI->second.find(&CB); TFCVI != TFRVI->second.end())
+      mergeInValue(&CB, TFCVI->second, getMaxWidenStepsOpts());
   }
 }
 
@@ -2194,8 +2202,9 @@ bool SCCPInstVisitor::resolvedUndef(Instruction &I) {
   // never be marked overdefined in resolvedUndefsIn.
   if (auto *CB = dyn_cast<CallBase>(&I))
     if (Function *F = CB->getCalledFunction())
-      if (TrackedRetVals.count(F))
-        return false;
+      if (auto VIt = TrackedRetVals.find(F); VIt != TrackedRetVals.end())
+        if (auto CIt = VIt->second.find(CB); CIt != VIt->second.end())
+          return false;
 
   if (isa<LoadInst>(I)) {
     // A load here means one of two things: a load of undef from a global,
@@ -2339,7 +2348,7 @@ const ValueLatticeElement &SCCPSolver::getLatticeValueFor(Value *V) const {
   return Visitor->getLatticeValueFor(V);
 }
 
-const MapVector<Function *, ValueLatticeElement> &
+const MapVector<Function *, MapVector<CallBase *, ValueLatticeElement>> &
 SCCPSolver::getTrackedRetVals() const {
   return Visitor->getTrackedRetVals();
 }

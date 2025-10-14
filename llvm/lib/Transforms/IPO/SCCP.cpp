@@ -274,11 +274,13 @@ static bool runIPSCCP(
 
   Solver.inferReturnAttributes();
   Solver.inferArgAttributes();
-  for (const auto &[F, ReturnValue] : Solver.getTrackedRetVals()) {
-    assert(!F->getReturnType()->isVoidTy() &&
-           "should not track void functions");
-    if (SCCPSolver::isConstant(ReturnValue) || ReturnValue.isUnknownOrUndef())
-      findReturnsToZap(*F, ReturnsToZap, Solver);
+  for (const auto &[F, ReturnValues] : Solver.getTrackedRetVals()) {
+    for (const auto &[CallBase, ReturnValue] : ReturnValues) {
+      assert(!F->getReturnType()->isVoidTy() &&
+             "should not track void functions");
+      if (SCCPSolver::isConstant(ReturnValue) || ReturnValue.isUnknownOrUndef())
+        findReturnsToZap(*F, ReturnsToZap, Solver);
+    }
   }
 
   for (auto *F : Solver.getMRVFunctionsTracked()) {

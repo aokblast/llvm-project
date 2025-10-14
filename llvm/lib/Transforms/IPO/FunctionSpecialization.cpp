@@ -844,8 +844,9 @@ bool FunctionSpecializer::run() {
       auto It = Solver.getTrackedRetVals().find(F);
       assert(It != Solver.getTrackedRetVals().end() &&
              "Return value ought to be tracked");
-      if (SCCPSolver::isOverdefined(It->second))
-        continue;
+      for (auto &[CallSite, ReturnValue] : It->second)
+        if (SCCPSolver::isOverdefined(ReturnValue))
+          continue;
     }
     for (User *U : F->users()) {
       if (auto *CS = dyn_cast<CallBase>(U)) {

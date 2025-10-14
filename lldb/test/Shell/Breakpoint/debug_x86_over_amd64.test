@@ -1,0 +1,37 @@
+# REQUIRES: target-x86_64
+# XFAIL: system-windows
+
+# RUN: mkdir -p %t
+# RUN: cd %t
+# RUN: %clang_host -g -m32 %p/Inputs/32bit-target.c -o dummy.out
+# RUN: %lldb -b -s %s dummy.out | FileCheck %s
+
+# CHECK: Current executable set to '{{.*}}dummy.out' (i386).
+
+breakpoint set -n main
+# Breakpoint {{[1-9]}}: where = dummy.out`main + 6 at 32bit-target.c:5:6, address = 0x{{[0-9]*}}
+
+breakpoint list
+# CHECK: name = 'main', locations = 1
+
+r
+# CHECK: * thread #1, name = 'dummy.out', stop reason = breakpoint 1.1
+
+n
+# CHECK: * thread #1, name = 'dummy.out', stop reason = step over
+
+p x
+# CHECK: 0
+
+n
+# CHECK: * thread #1, name = 'dummy.out', stop reason = step over
+
+p x
+# CHECK: 1
+
+target delete
+# CHECK: 1 targets deleted
+
+target create dummy.out
+# CHECK: Current executable set to '{{.*}}dummy.out' (i386).
+

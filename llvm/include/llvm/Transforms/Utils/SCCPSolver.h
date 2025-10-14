@@ -147,7 +147,7 @@ public:
   LLVM_ABI const ValueLatticeElement &getLatticeValueFor(Value *V) const;
 
   /// getTrackedRetVals - Get the inferred return value map.
-  LLVM_ABI const MapVector<Function *, ValueLatticeElement> &
+  LLVM_ABI const MapVector<Function *, MapVector<CallBase *, ValueLatticeElement>> &
   getTrackedRetVals() const;
 
   /// getTrackedGlobals - Get and return the set of inferred initializers for

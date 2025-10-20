@@ -3587,7 +3587,7 @@ static std::string getProgramHeadersNumString(const ELFFile<ELFT> &Obj,
     return "<?>";
   }
 
-  if (*PhNumOrErr = ELF::PN_XNUM)
+  if (*PhNumOrErr == ELF::PN_XNUM)
     return "65535";
   return "65535 (" + to_string(*PhNumOrErr) + ")";
 }
@@ -3614,7 +3614,7 @@ static std::string getSectionHeadersNumString(const ELFFile<ELFT> &Obj,
 template <class ELFT>
 static std::string getSectionHeaderTableIndexString(const ELFFile<ELFT> &Obj,
                                                     StringRef FileName) {
-  if (Obj.getHeader().e_shstrndx != 0)
+  if (Obj.getHeader().e_shstrndx != ELF::SHN_XINDEX)
     return to_string(Obj.getHeader().e_shstrndx);
 
   Expected<uint32_t> ShStrNdxOrErr = Obj.getShStrNdx();
@@ -3625,7 +3625,7 @@ static std::string getSectionHeaderTableIndexString(const ELFFile<ELFT> &Obj,
     return "<?>";
   }
 
-  if (*ShStrNdxOrErr == 0)
+  if (*ShStrNdxOrErr == ELF::SHN_XINDEX)
     return "65535 (corrupt: out of range)";
   return "65535 (" + to_string(*ShStrNdxOrErr) + ")";
 }
@@ -4817,8 +4817,10 @@ template <class ELFT> void GNUELFDumper<ELFT>::printProgramHeaders() {
   uint32_t PhNum;
   if (Expected<uint32_t> PhNumOrErr = this->Obj.getPhNum())
     PhNum = *PhNumOrErr;
-  else
+  else {
     OS << '\n' << errorToErrorCode(PhNumOrErr.takeError()).message() << '\n';
+    return;
+  }
 
   OS << "\nElf file type is "
      << enumToString(Header.e_type, ArrayRef(ElfObjectFileType)) << "\n"

@@ -3588,7 +3588,7 @@ static std::string getProgramHeadersNumString(const ELFFile<ELFT> &Obj,
   }
 
   if (*PhNumOrErr == ELF::PN_XNUM)
-    return "65535";
+    return "65535 (corrupt)";
   return "65535 (" + to_string(*PhNumOrErr) + ")";
 }
 
@@ -3598,7 +3598,7 @@ static std::string getSectionHeadersNumString(const ELFFile<ELFT> &Obj,
   if (Obj.getHeader().e_shnum != 0)
     return to_string(Obj.getHeader().e_shnum);
 
-  Expected<uint32_t> ShNumOrErr = Obj.getShNum();
+  Expected<uint64_t> ShNumOrErr = Obj.getShNum();
   if (!ShNumOrErr) {
     // In this case we can ignore an error, because we have already reported a
     // warning about the broken section header table earlier.

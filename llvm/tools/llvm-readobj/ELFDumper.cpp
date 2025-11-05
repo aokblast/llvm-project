@@ -433,6 +433,13 @@ protected:
       const typename SFrameParser<ELFT::Endianness>::FDERange::iterator FDE,
       ArrayRef<Relocation<ELFT>> Relocations, const Elf_Shdr *RelocSymTab);
 
+  std::string getProgramHeadersNumString(const ELFFile<ELFT> &Obj,
+                                         StringRef FileName);
+  std::string getSectionHeadersNumString(const ELFFile<ELFT> &Obj,
+                                         StringRef FileName);
+  std::string getSectionHeaderTableIndexString(const ELFFile<ELFT> &Obj,
+                                               StringRef FileName);
+
 private:
   mutable SmallVector<std::optional<VersionEntry>, 0> VersionMap;
 };
@@ -3573,58 +3580,60 @@ static inline void printFields(formatted_raw_ostream &OS, StringRef Str1,
 }
 
 template <class ELFT>
-static std::string getProgramHeadersNumString(const ELFFile<ELFT> &Obj,
-                                              StringRef FileName) {
-
-  if (Obj.getHeader().e_phnum != ELF::PN_XNUM)
-    return to_string(Obj.getHeader().e_phnum);
+std::string
+ELFDumper<ELFT>::getProgramHeadersNumString(const ELFFile<ELFT> &Obj,
+                                            StringRef FileName) {
 
   Expected<uint32_t> PhNumOrErr = Obj.getPhNum();
   if (!PhNumOrErr) {
     // In this case we can ignore an error, because we have already reported a
     // warning about the broken section header table earlier.
-    consumeError(PhNumOrErr.takeError());
+    this->reportUniqueWarning(PhNumOrErr.takeError());
     return "<?>";
   }
 
-  if (*PhNumOrErr == ELF::PN_XNUM)
+  uint32_t PhNum;
+  PhNum = *PhNumOrErr;
+  if (PhNum < ELF::PN_XNUM)
+    return to_string(PhNum);
+  if (PhNum == ELF::PN_XNUM)
     return "65535 (corrupt)";
-  return "65535 (" + to_string(*PhNumOrErr) + ")";
+  return "65535 (" + to_string(PhNum) + ")";
 }
 
 template <class ELFT>
-static std::string getSectionHeadersNumString(const ELFFile<ELFT> &Obj,
-                                              StringRef FileName) {
-  if (Obj.getHeader().e_shnum != 0)
-    return to_string(Obj.getHeader().e_shnum);
-
+std::string
+ELFDumper<ELFT>::getSectionHeadersNumString(const ELFFile<ELFT> &Obj,
+                                            StringRef FileName) {
   Expected<uint64_t> ShNumOrErr = Obj.getShNum();
   if (!ShNumOrErr) {
     // In this case we can ignore an error, because we have already reported a
     // warning about the broken section header table earlier.
-    consumeError(ShNumOrErr.takeError());
+    this->reportUniqueWarning(ShNumOrErr.takeError());
     return "<?>";
   }
-
-  if (*ShNumOrErr == 0)
-    return "0";
-  return "0 (" + to_string(*ShNumOrErr) + ")";
+  uint64_t ShNum;
+  ShNum = *ShNumOrErr;
+  if (ShNum < SHN_LORESERVE)
+    return to_string(ShNum);
+  return "0 (" + to_string(ShNum) + ")";
 }
 
 template <class ELFT>
-static std::string getSectionHeaderTableIndexString(const ELFFile<ELFT> &Obj,
-                                                    StringRef FileName) {
-  if (Obj.getHeader().e_shstrndx != ELF::SHN_XINDEX)
-    return to_string(Obj.getHeader().e_shstrndx);
-
+std::string
+ELFDumper<ELFT>::getSectionHeaderTableIndexString(const ELFFile<ELFT> &Obj,
+                                                  StringRef FileName) {
   Expected<uint32_t> ShStrNdxOrErr = Obj.getShStrNdx();
   if (!ShStrNdxOrErr) {
     // In this case we can ignore an error, because we have already reported a
     // warning about the broken section header table earlier.
-    consumeError(ShStrNdxOrErr.takeError());
+    this->reportUniqueWarning(ShStrNdxOrErr.takeError());
     return "<?>";
   }
-
+  uint32_t ShStrNdx;
+  ShStrNdx = *ShStrNdxOrErr;
+  if (ShStrNdx < ELF::SHN_XINDEX)
+    return to_string(Obj.getHeader().e_shstrndx);
   if (*ShStrNdxOrErr == ELF::SHN_XINDEX)
     return "65535 (corrupt: out of range)";
   return "65535 (" + to_string(*ShStrNdxOrErr) + ")";
@@ -3782,13 +3791,13 @@ template <class ELFT> void GNUELFDumper<ELFT>::printFileHeaders() {
   printFields(OS, "Size of this header:", Str);
   Str = to_string(e.e_phentsize) + " (bytes)";
   printFields(OS, "Size of program headers:", Str);
-  Str = getProgramHeadersNumString(this->Obj, this->FileName);
+  Str = this->getProgramHeadersNumString(this->Obj, this->FileName);
   printFields(OS, "Number of program headers:", Str);
   Str = to_string(e.e_shentsize) + " (bytes)";
   printFields(OS, "Size of section headers:", Str);
-  Str = getSectionHeadersNumString(this->Obj, this->FileName);
+  Str = this->getSectionHeadersNumString(this->Obj, this->FileName);
   printFields(OS, "Number of section headers:", Str);
-  Str = getSectionHeaderTableIndexString(this->Obj, this->FileName);
+  Str = this->getSectionHeaderTableIndexString(this->Obj, this->FileName);
   printFields(OS, "Section header string table index:", Str);
 }
 
@@ -4797,7 +4806,7 @@ void GNUELFDumper<ELFT>::printProgramHeaders(
   if (PrintProgramHeaders) {
     Expected<uint32_t> PhNumOrErr = this->Obj.getPhNum();
     if (!PhNumOrErr) {
-      OS << '\n' << errorToErrorCode(PhNumOrErr.takeError()).message() << '\n';
+      this->reportUniqueWarning(PhNumOrErr.takeError());
     } else if (*PhNumOrErr == 0) {
       OS << "\nThere are no program headers in this file.\n";
     } else {
@@ -4814,12 +4823,11 @@ template <class ELFT> void GNUELFDumper<ELFT>::printProgramHeaders() {
   const Elf_Ehdr &Header = this->Obj.getHeader();
   Field Fields[8] = {2,         17,        26,        37 + Bias,
                      48 + Bias, 56 + Bias, 64 + Bias, 68 + Bias};
-  uint32_t PhNum;
-  if (Expected<uint32_t> PhNumOrErr = this->Obj.getPhNum())
+  uint32_t PhNum = 0;
+  if (Expected<uint32_t> PhNumOrErr = this->Obj.getPhNum(); PhNumOrErr)
     PhNum = *PhNumOrErr;
   else {
-    OS << '\n' << errorToErrorCode(PhNumOrErr.takeError()).message() << '\n';
-    return;
+    this->reportUniqueWarning(PhNumOrErr.takeError());
   }
 
   OS << "\nElf file type is "
@@ -7498,12 +7506,13 @@ template <class ELFT> void LLVMELFDumper<ELFT>::printFileHeaders() {
     W.printNumber("HeaderSize", E.e_ehsize);
     W.printNumber("ProgramHeaderEntrySize", E.e_phentsize);
     W.printString("ProgramHeaderCount",
-                  getProgramHeadersNumString(this->Obj, this->FileName));
+                  this->getProgramHeadersNumString(this->Obj, this->FileName));
     W.printNumber("SectionHeaderEntrySize", E.e_shentsize);
     W.printString("SectionHeaderCount",
-                  getSectionHeadersNumString(this->Obj, this->FileName));
-    W.printString("StringTableSectionIndex",
-                  getSectionHeaderTableIndexString(this->Obj, this->FileName));
+                  this->getSectionHeadersNumString(this->Obj, this->FileName));
+    W.printString(
+        "StringTableSectionIndex",
+        this->getSectionHeaderTableIndexString(this->Obj, this->FileName));
   }
 }
 

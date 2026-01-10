@@ -1621,11 +1621,6 @@ void SCCPInstVisitor::visitInsertValueInst(InsertValueInst &IVI) {
 }
 
 void SCCPInstVisitor::visitSelectInst(SelectInst &I) {
-  // If this select returns a struct, just mark the result overdefined.
-  // TODO: We could do a lot better than this if code actually uses this.
-  if (I.getType()->isStructTy())
-    return (void)markOverdefined(&I);
-
   // resolvedUndefsIn might mark I as overdefined. Bail out, even if we would
   // discover a concrete value later.
   if (ValueState[&I].isOverdefined())
@@ -1638,17 +1633,41 @@ void SCCPInstVisitor::visitSelectInst(SelectInst &I) {
   if (ConstantInt *CondCB =
           getConstantInt(CondValue, I.getCondition()->getType())) {
     Value *OpVal = CondCB->isZero() ? I.getFalseValue() : I.getTrueValue();
-    const ValueLatticeElement &OpValState = getValueState(OpVal);
-    // Safety: ValueState[&I] doesn't invalidate OpValState since it is already
-    // in the map.
-    assert(ValueState.contains(&I) && "&I is not in ValueState map.");
-    mergeInValue(ValueState[&I], &I, OpValState);
+    if (StructType *STy = dyn_cast<StructType>(OpVal->getType())) {
+      for (unsigned i = 0, e = STy->getNumElements(); i < e; ++i)
+        mergeInValue(getStructValueState(&I, i), &I,
+                     getStructValueState(OpVal, i));
+    } else {
+      const ValueLatticeElement &OpValState = getValueState(OpVal);
+      // Safety: ValueState[&I] doesn't invalidate OpValState since it is
+      // already in the map.
+      assert(ValueState.contains(&I) && "&I is not in ValueState map.");
+      mergeInValue(ValueState[&I], &I, OpValState);
+    }
     return;
   }
 
   // Otherwise, the condition is overdefined or a constant we can't evaluate.
   // See if we can produce something better than overdefined based on the T/F
   // value.
+  if (StructType *STy = dyn_cast<StructType>(I.getTrueValue()->getType())) {
+    bool Changed = false;
+    for (unsigned i = 0, e = STy->getNumElements(); i < e; ++i) {
+      ValueLatticeElement TVal = getStructValueState(I.getTrueValue(), i);
+      ValueLatticeElement FVal = getStructValueState(I.getFalseValue(), i);
+
+      ValueLatticeElement &State = getStructValueState(&I, i);
+      bool ChangedInEle = State.mergeIn(TVal);
+      ChangedInEle |= State.mergeIn(FVal);
+      if (ChangedInEle)
+        LLVM_DEBUG(dbgs() << "updated " << State << ": " << I << '\n');
+      Changed |= ChangedInEle;
+    }
+    if (Changed)
+      pushUsersToWorkList(&I);
+    return;
+  }
+
   ValueLatticeElement TVal = getValueState(I.getTrueValue());
   ValueLatticeElement FVal = getValueState(I.getFalseValue());
 

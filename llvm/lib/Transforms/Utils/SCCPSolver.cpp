@@ -1626,7 +1626,7 @@ void SCCPInstVisitor::visitInsertValueInst(InsertValueInst &IVI) {
 void SCCPInstVisitor::visitSelectInst(SelectInst &I) {
   // resolvedUndefsIn might mark I as overdefined. Bail out, even if we would
   // discover a concrete value later.
-  if (ValueState[&I].isOverdefined())
+  if (isInstFullyOverDefined(I))
     return (void)markOverdefined(&I);
 
   const ValueLatticeElement &CondValue = getValueState(I.getCondition());
@@ -1637,9 +1637,10 @@ void SCCPInstVisitor::visitSelectInst(SelectInst &I) {
           getConstantInt(CondValue, I.getCondition()->getType())) {
     Value *OpVal = CondCB->isZero() ? I.getFalseValue() : I.getTrueValue();
     if (StructType *STy = dyn_cast<StructType>(OpVal->getType())) {
-      for (unsigned i = 0, e = STy->getNumElements(); i < e; ++i)
-        mergeInValue(getStructValueState(&I, i), &I,
-                     getStructValueState(OpVal, i));
+      for (unsigned i = 0, e = STy->getNumElements(); i < e; ++i) {
+        const ValueLatticeElement &OpValState = getStructValueState(OpVal, i);
+        mergeInValue(StructValueState[std::make_pair(&I, i)], &I, OpValState);
+      }
     } else {
       const ValueLatticeElement &OpValState = getValueState(OpVal);
       // Safety: ValueState[&I] doesn't invalidate OpValState since it is

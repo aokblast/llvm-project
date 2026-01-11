@@ -1685,25 +1685,34 @@ void SCCPInstVisitor::visitUnaryOperator(Instruction &I) {
 }
 
 void SCCPInstVisitor::visitFreezeInst(FreezeInst &I) {
-  // If this freeze returns a struct, just mark the result overdefined.
-  // TODO: We could do a lot better than this.
-  if (I.getType()->isStructTy())
-    return (void)markOverdefined(&I);
-
-  ValueLatticeElement V0State = getValueState(I.getOperand(0));
-  ValueLatticeElement &IV = ValueState[&I];
   // resolvedUndefsIn might mark I as overdefined. Bail out, even if we would
   // discover a concrete value later.
-  if (IV.isOverdefined())
+  if (isInstFullyOverDefined(I))
     return (void)markOverdefined(&I);
 
-  // If something is unknown/undef, wait for it to resolve.
-  if (V0State.isUnknownOrUndef())
-    return;
+  auto MergeCb = [this, &I](ValueLatticeElement &IV, ValueLatticeElement ArgV) {
+    // If something is unknown/undef, wait for it to resolve.
+    if (ArgV.isUnknownOrUndef())
+      return;
+    Constant *Constant = getConstant(ArgV, I.getType());
+    if (SCCPSolver::isConstant(ArgV) &&
+        isGuaranteedNotToBeUndefOrPoison(Constant))
+      markConstant(IV, &I, Constant);
+  };
 
-  if (SCCPSolver::isConstant(V0State) &&
-      isGuaranteedNotToBeUndefOrPoison(getConstant(V0State, I.getType())))
-    return (void)markConstant(IV, &I, getConstant(V0State, I.getType()));
+  Value *Operand = I.getOperand(0);
+
+  assert(Operand->getType()->isStructTy() == I.getType()->isStructTy() &&
+         "Operand and Inst shoulde have same type");
+  if (StructType *STy = dyn_cast<StructType>(I.getType())) {
+    for (unsigned i = 0; i < STy->getNumElements(); ++i) {
+      ValueLatticeElement ArgV = getStructValueState(Operand, i);
+      MergeCb(StructValueState[std::make_pair(&I, i)], std::move(ArgV));
+    }
+  } else {
+    ValueLatticeElement ArgV = getValueState(Operand);
+    MergeCb(ValueState[&I], std::move(ArgV));
+  }
 
   markOverdefined(&I);
 }

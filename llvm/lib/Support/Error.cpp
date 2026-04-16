@@ -206,10 +206,14 @@ LLVMErrorRef LLVMCreateStringError(const char *ErrMsg) {
   return wrap(make_error<StringError>(ErrMsg, inconvertibleErrorCode()));
 }
 
-char WrappedError::ID = 0;
+char ContextualizedError::ID = 0;
 
-void WrappedError::log(llvm::raw_ostream &OS) const {
-  if (Prefix.size())
-    OS << Prefix << ": ";
-  OS << Msg;
+void ContextualizedError::log(llvm::raw_ostream &OS) const {
+  if (Context.size())
+    OS << Context << ": ";
+  OS << Err->message();
+}
+
+std::error_code ContextualizedError::convertToErrorCode() const {
+  return Err->convertToErrorCode();
 }

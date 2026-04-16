@@ -87,10 +87,6 @@ inline Error createError(const Twine &Err) {
   return make_error<StringError>(Err, object_error::parse_failed);
 }
 
-inline Error createError(const Twine &Msg, const Twine &Prefix) {
-  return make_error<WrappedError>(Msg, Prefix);
-}
-
 } // end namespace object.
 
 } // end namespace llvm.

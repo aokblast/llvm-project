@@ -1497,24 +1497,35 @@ inline Error unwrap(LLVMErrorRef ErrRef) {
       reinterpret_cast<ErrorInfoBase *>(ErrRef)));
 }
 
-class LLVM_ABI WrappedError : public ErrorInfo<WrappedError, ECError> {
+class LLVM_ABI ContextualizedError : public ErrorInfo<ContextualizedError> {
 public:
   static char ID;
-  WrappedError(const Twine &Msg, const Twine &Prefix = "")
-      : Msg(Msg.str()), Prefix(Prefix.str()) {}
+  ContextualizedError(std::unique_ptr<ErrorInfoBase> E,
+                      const Twine &Prefix = "")
+      : Err(std::move(E)), Context(Prefix.str()) {}
   void log(raw_ostream &OS) const override;
-  const std::string &getMessage() const { return Msg; }
-  const std::string &getPrefix() const { return Prefix; }
+  Error takeError() { return Error(std::move(Err)); }
+  const std::string &getPrefix() const { return Context; }
+  std::error_code convertToErrorCode() const override;
+  static Error build(Error E, const Twine &Prefix) {
+    std::unique_ptr<ErrorInfoBase> Payload;
+    handleAllErrors(std::move(E),
+                    [&](std::unique_ptr<ErrorInfoBase> EIB) -> Error {
+                      Payload = std::move(EIB);
+                      return Error::success();
+                    });
+    return Error(std::unique_ptr<ContextualizedError>(
+        new ContextualizedError(std::move(Payload), Prefix)));
+  }
 
 private:
-  std::string Msg;
-  std::string Prefix;
+  std::unique_ptr<ErrorInfoBase> Err;
+  std::string Context;
 };
 
-inline Error createWrappedError(const Twine &Msg, const Twine &Prefix) {
-  return make_error<WrappedError>(Msg, Prefix);
+inline Error createContextualizedError(Error E, const Twine &Prefix = "") {
+  return ContextualizedError::build(std::move(E), Prefix);
 }
-
 } // end namespace llvm
 
 #endif // LLVM_SUPPORT_ERROR_H

@@ -18,6 +18,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Object/ELFTypes.h"
 #include "llvm/Object/Error.h"
@@ -76,6 +77,10 @@ LLVM_ABI StringRef getRISCVVendorRelocationTypeName(uint32_t Type,
                                                     StringRef Vendor);
 LLVM_ABI uint32_t getELFRelativeRelocationType(uint32_t Machine);
 LLVM_ABI StringRef getELFSectionTypeName(uint32_t Machine, uint32_t Type);
+
+static inline Error createError(Error E, const Twine &Context) {
+  return createContextualizedError(std::move(E), Context);
+}
 
 // Subclasses of ELFFile may need this for template instantiation
 inline std::pair<unsigned char, unsigned char>
@@ -621,7 +626,7 @@ getExtendedSymbolTableIndex(const typename ELFT::Sym &Sym, unsigned SymIndex,
 
   Expected<typename ELFT::Word> TableOrErr = ShndxTable[SymIndex];
   if (!TableOrErr)
-    return createError(toString(TableOrErr.takeError()),
+    return createError(TableOrErr.takeError(),
                        "unable to read an extended symbol table at index " +
                            Twine(SymIndex));
   return *TableOrErr;
@@ -840,8 +845,8 @@ ELFFile<ELFT>::getSectionStringTable(Elf_Shdr_Range Sections,
   Expected<uint32_t> ShStrNdxOrErr = getShStrNdx();
   if (!ShStrNdxOrErr)
     return createError(
-        "e_shstrndx == SHN_XINDEX, but cannot read section header 0: " +
-        toString(ShStrNdxOrErr.takeError()));
+        ShStrNdxOrErr.takeError(),
+        "e_shstrndx == SHN_XINDEX, but cannot read section header 0: ");
 
   uint32_t Index = *ShStrNdxOrErr;
   // There is no section name string table. Return FakeSectionStrings which
@@ -1151,7 +1156,7 @@ ELFFile<ELFT>::getVersionDefinitions(const Elf_Shdr &Sec) const {
 
   Expected<ArrayRef<uint8_t>> ContentsOrErr = getSectionContents(Sec);
   if (!ContentsOrErr)
-    return createError(toString(ContentsOrErr.takeError()),
+    return createError(ContentsOrErr.takeError(),
                        "cannot read content of " + describe(*this, Sec));
 
   const uint8_t *Start = ContentsOrErr->data();
@@ -1244,7 +1249,7 @@ ELFFile<ELFT>::getVersionDependencies(const Elf_Shdr &Sec,
 
   Expected<ArrayRef<uint8_t>> ContentsOrErr = getSectionContents(Sec);
   if (!ContentsOrErr)
-    return createError(toString(ContentsOrErr.takeError()),
+    return createError(ContentsOrErr.takeError(),
                        "cannot read content of " + describe(*this, Sec));
 
   const uint8_t *Start = ContentsOrErr->data();
@@ -1421,12 +1426,12 @@ ELFFile<ELFT>::getLinkAsStrtab(const typename ELFT::Shdr &Sec) const {
   Expected<const typename ELFT::Shdr *> StrTabSecOrErr =
       getSection(Sec.sh_link);
   if (!StrTabSecOrErr)
-    return createError(toString(StrTabSecOrErr.takeError()),
+    return createError(StrTabSecOrErr.takeError(),
                        "invalid section linked to " + describe(*this, Sec));
 
   Expected<StringRef> StrTabOrErr = getStringTable(**StrTabSecOrErr);
   if (!StrTabOrErr)
-    return createError(toString(StrTabOrErr.takeError()),
+    return createError(StrTabOrErr.takeError(),
                        "invalid string table linked to " +
                            describe(*this, Sec));
   return *StrTabOrErr;

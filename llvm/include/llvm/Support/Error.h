@@ -1506,7 +1506,7 @@ public:
   void log(raw_ostream &OS) const override;
   Error takeError() { return Error(std::move(Err)); }
   const std::string &getContext() const { return Context; }
-  const std::string &getMessageWithoutContext() const { return Err->message(); }
+  std::string getMessageWithoutContext() const { return Err->message(); }
   std::error_code convertToErrorCode() const override;
   static Error build(Error E, const Twine &Prefix) {
     std::unique_ptr<ErrorInfoBase> Payload;

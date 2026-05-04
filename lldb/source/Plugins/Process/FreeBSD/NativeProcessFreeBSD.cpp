@@ -10,6 +10,7 @@
 
 // clang-format off
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <sys/sysctl.h>
 #include <sys/user.h>
@@ -1088,4 +1089,138 @@ NativeProcessFreeBSD::SaveCore(llvm::StringRef path_hint) {
       llvm::inconvertibleErrorCode(),
       "PT_COREDUMP not supported in the FreeBSD version used to build LLDB");
 #endif
+}
+
+llvm::Expected<uint64_t>
+NativeProcessFreeBSD::Syscall(llvm::ArrayRef<uint64_t> args) {
+  PopulateMemoryRegionCache();
+  auto region_it = llvm::find_if(m_mem_region_cache, [](const auto &pair) {
+    return pair.first.GetExecutable() == eLazyBoolYes &&
+           pair.first.GetShared() != eLazyBoolYes;
+  });
+  if (region_it == m_mem_region_cache.end())
+    return llvm::createStringError(llvm::inconvertibleErrorCode(),
+                                   "No executable memory region found!");
+
+  addr_t exe_addr = region_it->first.GetRange().GetRangeBase();
+
+  NativeThreadFreeBSD &thread =
+      static_cast<NativeThreadFreeBSD &>(*GetCurrentThread());
+  assert(thread.GetState() == eStateStopped);
+  NativeRegisterContextFreeBSD &reg_ctx = thread.GetRegisterContext();
+
+  NativeRegisterContextFreeBSD::SyscallData syscall_data =
+      *reg_ctx.GetSyscallData();
+
+  WritableDataBufferSP registers_sp;
+  if (llvm::Error Err = reg_ctx.ReadAllRegisterValues(registers_sp).ToError())
+    return std::move(Err);
+  llvm::scope_exit restore_regs(
+      [&] { reg_ctx.WriteAllRegisterValues(registers_sp); });
+
+  llvm::SmallVector<uint8_t, 8> memory(syscall_data.Insn.size());
+  size_t bytes_read;
+  if (llvm::Error Err =
+          ReadMemory(exe_addr, memory.data(), memory.size(), bytes_read)
+              .ToError()) {
+    return std::move(Err);
+  }
+
+  llvm::scope_exit restore_mem(
+      [&] { WriteMemory(exe_addr, memory.data(), memory.size(), bytes_read); });
+
+  if (llvm::Error Err = reg_ctx.SetPC(exe_addr).ToError())
+    return std::move(Err);
+
+  for (const auto &zip : llvm::zip_first(args, syscall_data.Args)) {
+    if (llvm::Error Err =
+            reg_ctx
+                .WriteRegisterFromUnsigned(std::get<1>(zip), std::get<0>(zip))
+                .ToError()) {
+      return std::move(Err);
+    }
+  }
+  if (llvm::Error Err = WriteMemory(exe_addr, syscall_data.Insn.data(),
+                                    syscall_data.Insn.size(), bytes_read)
+                            .ToError())
+    return std::move(Err);
+
+  m_mem_region_cache.clear();
+
+  if (llvm::Error Err =
+          PtraceWrapper(PT_STEP, thread.GetID(), nullptr, 0).ToError())
+    return std::move(Err);
+
+  int status;
+  ::pid_t wait_pid = llvm::sys::RetryAfterSignal(-1, ::waitpid, thread.GetID(),
+                                                 &status, P_ALL);
+  if (wait_pid == -1) {
+    return llvm::errorCodeToError(
+        std::error_code(errno, std::generic_category()));
+  }
+  assert((unsigned)wait_pid == thread.GetID());
+
+  uint64_t result = reg_ctx.ReadRegisterAsUnsigned(syscall_data.Result, -ESRCH);
+
+  // Values larger than this are actually negative errno numbers.
+  uint64_t errno_threshold =
+      (uint64_t(-1) >> (64 - 8 * m_arch.GetAddressByteSize())) - 0x1000;
+  if (result > errno_threshold) {
+    return llvm::errorCodeToError(
+        std::error_code(-result & 0xfff, std::generic_category()));
+  }
+
+  return result;
+}
+
+llvm::Expected<addr_t>
+NativeProcessFreeBSD::AllocateMemory(size_t size, uint32_t permissions) {
+  NativeThreadFreeBSD &thread =
+      static_cast<NativeThreadFreeBSD &>(*GetCurrentThread());
+  std::optional<NativeRegisterContextFreeBSD::MmapData> mmap_data =
+      static_cast<NativeRegisterContextFreeBSD &>(thread.GetRegisterContext())
+          .GetMmapData();
+  if (!mmap_data)
+    return llvm::make_error<UnimplementedError>();
+
+  unsigned prot = PROT_NONE;
+  assert((permissions & (ePermissionsReadable | ePermissionsWritable |
+                         ePermissionsExecutable)) == permissions &&
+         "Unknown permission!");
+  if (permissions & ePermissionsReadable)
+    prot |= PROT_READ;
+  if (permissions & ePermissionsWritable)
+    prot |= PROT_WRITE;
+  if (permissions & ePermissionsExecutable)
+    prot |= PROT_EXEC;
+
+  llvm::Expected<uint64_t> Result =
+      Syscall({mmap_data->SysMmap, 0, size, prot, MAP_ANONYMOUS | MAP_PRIVATE,
+               uint64_t(-1), 0});
+  if (Result)
+    m_allocated_memory.try_emplace(*Result, size);
+  return Result;
+}
+
+llvm::Error NativeProcessFreeBSD::DeallocateMemory(lldb::addr_t addr) {
+  NativeThreadFreeBSD &thread =
+      static_cast<NativeThreadFreeBSD &>(*GetCurrentThread());
+  std::optional<NativeRegisterContextFreeBSD::MmapData> mmap_data =
+      static_cast<NativeRegisterContextFreeBSD &>(thread.GetRegisterContext())
+          .GetMmapData();
+  if (!mmap_data)
+    return llvm::make_error<UnimplementedError>();
+
+  auto it = m_allocated_memory.find(addr);
+  if (it == m_allocated_memory.end())
+    return llvm::createStringError(llvm::errc::invalid_argument,
+                                   "Memory not allocated by the debugger.");
+
+  llvm::Expected<uint64_t> Result =
+      Syscall({mmap_data->SysMunmap, addr, it->second});
+  if (!Result)
+    return Result.takeError();
+
+  m_allocated_memory.erase(it);
+  return llvm::Error::success();
 }

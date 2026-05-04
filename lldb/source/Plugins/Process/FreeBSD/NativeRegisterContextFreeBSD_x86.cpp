@@ -657,4 +657,28 @@ NativeRegisterContextFreeBSD_x86::GetYMMSplitReg(uint32_t reg) {
   return YMMSplitPtr{&fpreg->sv_xmm[reg_index], &ymmreg[reg_index]};
 }
 
+std::optional<NativeRegisterContextFreeBSD::SyscallData>
+NativeRegisterContextFreeBSD_x86::GetSyscallData() {
+  switch (GetRegisterInfoInterface().GetTargetArchitecture().GetMachine()) {
+  case llvm::Triple::x86: {
+    static const uint8_t Int80[] = {0xcd, 0x80};
+    static const uint32_t Args[] = {lldb_eax_i386, lldb_ebx_i386, lldb_ecx_i386,
+                                    lldb_edx_i386, lldb_esi_i386, lldb_edi_i386,
+                                    lldb_ebp_i386};
+    return SyscallData{Int80, Args, lldb_eax_i386};
+  }
+  case llvm::Triple::x86_64: {
+    static const uint8_t Syscall[] = {0x0f, 0x05};
+    static const uint32_t Args[] = {
+        x86_64_with_base::lldb_rax, x86_64_with_base::lldb_rdi,
+        x86_64_with_base::lldb_rsi, x86_64_with_base::lldb_rdx,
+        x86_64_with_base::lldb_r10, x86_64_with_base::lldb_r8,
+        x86_64_with_base::lldb_r9};
+    return SyscallData{Syscall, Args, x86_64_with_base::lldb_rax};
+  }
+  default:
+    llvm_unreachable("Unhandled architecture!");
+  }
+}
+
 #endif // defined(__i386__) || defined(__x86_64__)

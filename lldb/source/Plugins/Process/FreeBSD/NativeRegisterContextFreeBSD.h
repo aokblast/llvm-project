@@ -31,6 +31,29 @@ public:
   virtual llvm::Error
   CopyHardwareWatchpointsFrom(NativeRegisterContextFreeBSD &source) = 0;
 
+  struct SyscallData {
+    /// The syscall instruction. If the architecture uses software
+    /// single-stepping, the instruction should also be followed by a trap to
+    /// ensure the process is stopped after the syscall.
+    llvm::ArrayRef<uint8_t> Insn;
+
+    /// Registers used for syscall arguments. The first register is used to
+    /// store the syscall number.
+    llvm::ArrayRef<uint32_t> Args;
+
+    uint32_t Result; ///< Register containing the syscall result.
+  };
+
+  virtual std::optional<SyscallData> GetSyscallData() { return std::nullopt; }
+  /// Return architecture-specific data needed to make inferior syscalls, if
+  /// they are supported.
+  struct MmapData {
+    // relevant architecture.
+    unsigned SysMmap;   ///< mmap syscall number.
+    unsigned SysMunmap; ///< munmap syscall number
+  };
+  std::optional<MmapData> GetMmapData() { return MmapData{477, 73}; }
+
 protected:
   virtual NativeProcessFreeBSD &GetProcess();
   virtual ::pid_t GetProcessPid();

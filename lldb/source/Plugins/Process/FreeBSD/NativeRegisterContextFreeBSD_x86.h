@@ -55,6 +55,9 @@ public:
   llvm::Error
   CopyHardwareWatchpointsFrom(NativeRegisterContextFreeBSD &source) override;
 
+  std::optional<NativeRegisterContextFreeBSD::SyscallData>
+  GetSyscallData() override;
+
 private:
   // Private member types.
   enum RegSetKind {

@@ -92,9 +92,16 @@ public:
 
   llvm::Expected<std::string> SaveCore(llvm::StringRef path_hint) override;
 
+  llvm::Expected<lldb::addr_t> AllocateMemory(size_t size,
+                                              uint32_t permissions) override;
+
+  llvm::Error DeallocateMemory(lldb::addr_t addr) override;
+
 protected:
   llvm::Expected<llvm::ArrayRef<uint8_t>>
   GetSoftwareBreakpointTrapOpcode(size_t size_hint) override;
+
+  llvm::Expected<uint64_t> Syscall(llvm::ArrayRef<uint64_t> args);
 
 private:
   MainLoop::SignalHandleUP m_sigchld_handle;
@@ -102,6 +109,8 @@ private:
   MainLoop &m_main_loop;
   LazyBool m_supports_mem_region = eLazyBoolCalculate;
   std::vector<std::pair<MemoryRegionInfo, FileSpec>> m_mem_region_cache;
+  /// Inferior memory (allocated by us) and its size.
+  llvm::DenseMap<lldb::addr_t, lldb::addr_t> m_allocated_memory;
 
   // Private Instance Methods
   NativeProcessFreeBSD(::pid_t pid, int terminal_fd, NativeDelegate &delegate,

@@ -133,6 +133,17 @@ CreateCI(const llvm::opt::ArgStringList &Argv) {
   // times, reusing the same AST.
   Clang->getCodeGenOpts().ClearASTBeforeBackend = false;
 
+  // Reach external data (e.g. C++ type-info such as _ZTIPKc, used for exception
+  // handling) through the GOT rather than with a direct PC-relative access.
+  // JIT'd code is mapped wherever the OS places it, which can be more than 2GB
+  // away from the host symbol it references (as happens on FreeBSD). A direct
+  // dso_local reference then becomes an out-of-range Delta32/PC32 relocation in
+  // JITLink (breaking e.g. Interpreter/simple-exception.cpp), whereas a GOT
+  // entry holds the full 64-bit address and keeps the fixup in range. This is
+  // independent of the PIC level, so unlike -fPIC it does not define __PIC__
+  // and keeps precompiled headers compatible (Interpreter/execute-pch.cpp).
+  Clang->getCodeGenOpts().DirectAccessExternalData = false;
+
   Clang->getFrontendOpts().DisableFree = false;
   Clang->getCodeGenOpts().DisableFree = false;
   return std::move(Clang);

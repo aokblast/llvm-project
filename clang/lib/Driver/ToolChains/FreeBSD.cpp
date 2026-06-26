@@ -473,7 +473,7 @@ FreeBSD::getDefaultUnwindTableLevel(const ArgList &Args) const {
 }
 
 bool FreeBSD::isPIEDefault(const llvm::opt::ArgList &Args) const {
-  return getSanitizerArgs(Args).requiresPIE();
+  return CLANG_DEFAULT_PIE || getSanitizerArgs(Args).requiresPIE();
 }
 
 SanitizerMask

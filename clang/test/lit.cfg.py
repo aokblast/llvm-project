@@ -337,6 +337,9 @@ if not (config.build_shared_libs or config.link_llvm_dylib or config.link_clang_
 if config.has_plugins and config.llvm_plugin_ext:
     config.available_features.add("plugins")
 
+if config.clang_default_pie_on_freebsd:
+    config.available_features.add("default-pie-on-freebsd")
+
 if config.clang_default_pie_on_linux:
     config.available_features.add("default-pie-on-linux")
 

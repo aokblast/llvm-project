@@ -15,7 +15,6 @@
 #include "flang/Semantics/tools.h"
 #include "flang/Semantics/type.h"
 #include "flang/Support/Fortran.h"
-#include "llvm/Support/AtomicOrdering.h"
 
 #include <optional>
 
@@ -36,6 +35,7 @@ using ReductionOpsSet =
 
 static ReductionOpsSet reductionIntegerSet{
     Fortran::parser::ReductionOperator::Operator::Plus,
+    Fortran::parser::ReductionOperator::Operator::Minus,
     Fortran::parser::ReductionOperator::Operator::Multiply,
     Fortran::parser::ReductionOperator::Operator::Max,
     Fortran::parser::ReductionOperator::Operator::Min,
@@ -45,12 +45,14 @@ static ReductionOpsSet reductionIntegerSet{
 
 static ReductionOpsSet reductionRealSet{
     Fortran::parser::ReductionOperator::Operator::Plus,
+    Fortran::parser::ReductionOperator::Operator::Minus,
     Fortran::parser::ReductionOperator::Operator::Multiply,
     Fortran::parser::ReductionOperator::Operator::Max,
     Fortran::parser::ReductionOperator::Operator::Min};
 
 static ReductionOpsSet reductionComplexSet{
     Fortran::parser::ReductionOperator::Operator::Plus,
+    Fortran::parser::ReductionOperator::Operator::Minus,
     Fortran::parser::ReductionOperator::Operator::Multiply};
 
 static ReductionOpsSet reductionLogicalSet{
@@ -1083,6 +1085,11 @@ void AccStructureChecker::Enter(const parser::AccClause::Reduction &reduction) {
   const parser::AccObjectListWithReduction &list{reduction.v};
   const auto &op{std::get<parser::ReductionOperator>(list.t)};
   const auto &objects{std::get<parser::AccObjectList>(list.t)};
+
+  if (op.v == parser::ReductionOperator::Operator::Minus) {
+    context_.Warn(common::UsageWarning::OpenAccUsage, GetContext().clauseSource,
+        "The minus '-' reduction operator is non-standard and is treated as '+'"_warn_en_US);
+  }
 
   for (const auto &object : objects.v) {
     common::visit(

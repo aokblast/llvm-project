@@ -1,5 +1,3 @@
-// REQUIRES: default-pie-on-freebsd
-
 // -fPIC and -fPIE only affects host relocation model.
 // device compilation always uses PIC. 
 

@@ -1,13 +1,19 @@
+/// PIE is the default on FreeBSD >= 13.1 (and unversioned triples); earlier
+/// releases default to non-PIE.
+// RUN: %clang \
+// RUN:   --target=aarch64-pc-freebsd14 %s                              \
+// RUN:   --sysroot=%S/Inputs/basic_freebsd64_tree -### 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-ARM64-PIE %s
+
 // RUN: %clang \
 // RUN:   --target=aarch64-pc-freebsd11 %s                              \
 // RUN:   --sysroot=%S/Inputs/basic_freebsd64_tree -### 2>&1 \
-// RUN:   %if default-pie-on-freebsd %{ | FileCheck --check-prefix=CHECK-ARM64-PIE %s %} \
-// RUN:   %else %{ | FileCheck --check-prefix=CHECK-ARM64 %s %}
+// RUN:   | FileCheck --check-prefix=CHECK-ARM64 %s
 // CHECK-ARM64: "-cc1" "-triple" "aarch64-pc-freebsd11"
 // CHECK-ARM64: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]"
 // CHECK-ARM64: "--eh-frame-hdr" "-dynamic-linker" "{{.*}}ld-elf{{.*}}" "-o" "a.out" "{{.*}}crt1.o" "{{.*}}crti.o" "{{.*}}crtbegin.o" "-L[[SYSROOT]]/usr/lib" "{{.*}}.o" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "-lc" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "{{.*}}crtend.o" "{{.*}}crtn.o"
 
-// CHECK-ARM64-PIE: "-cc1" "-triple" "aarch64-pc-freebsd11"
+// CHECK-ARM64-PIE: "-cc1" "-triple" "aarch64-pc-freebsd{{[0-9]+}}"
 // CHECK-ARM64-PIE: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]" "-pie"
 // CHECK-ARM64-PIE: "--eh-frame-hdr" "-dynamic-linker" "{{.*}}ld-elf{{.*}}"  "--enable-new-dtags" "-o" "a.out" "{{.*}}crt1.o" "{{.*}}crti.o" "{{.*}}crtbeginS.o" "-L[[SYSROOT]]/usr/lib" "{{.*}}.o" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "-lc" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "{{.*}}crtendS.o" "{{.*}}crtn.o"
 
@@ -28,11 +34,7 @@
 // RUN: %clang \
 // RUN:   --target=powerpc-pc-freebsd %s    \
 // RUN:   --sysroot=%S/Inputs/basic_freebsd_tree -### 2>&1 \
-// RUN:   %if default-pie-on-freebsd %{ | FileCheck --check-prefix=CHECK-PPC-PIE %s %} \
-// RUN:   %else %{ | FileCheck --check-prefix=CHECK-PPC %s %}
-// CHECK-PPC: "-cc1" "-triple" "powerpc-pc-freebsd"
-// CHECK-PPC: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]"
-// CHECK-PPC: "--eh-frame-hdr" "-dynamic-linker" "{{.*}}ld-elf{{.*}}" "-o" "a.out" "{{.*}}crt1.o" "{{.*}}crti.o" "{{.*}}crtbegin.o" "-L[[SYSROOT]]/usr/lib" "{{.*}}.o" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "-lc" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "{{.*}}crtend.o" "{{.*}}crtn.o"
+// RUN:   | FileCheck --check-prefix=CHECK-PPC-PIE %s
 
 // CHECK-PPC-PIE: "-cc1" "-triple" "powerpc-pc-freebsd"
 // CHECK-PPC-PIE: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]" "-pie"
@@ -55,11 +57,7 @@
 // RUN: %clang \
 // RUN:   --target=powerpc64-pc-freebsd %s                              \
 // RUN:   --sysroot=%S/Inputs/basic_freebsd64_tree -### 2>&1 \
-// RUN:   %if default-pie-on-freebsd %{ | FileCheck --check-prefix=CHECK-PPC64-PIE %s %} \
-// RUN:   %else %{ | FileCheck --check-prefix=CHECK-PPC64 %s %}
-// CHECK-PPC64: "-cc1" "-triple" "powerpc64-pc-freebsd"
-// CHECK-PPC64: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]"
-// CHECK-PPC64: "--eh-frame-hdr" "-dynamic-linker" "{{.*}}ld-elf{{.*}}" "-o" "a.out" "{{.*}}crt1.o" "{{.*}}crti.o" "{{.*}}crtbegin.o" "-L[[SYSROOT]]/usr/lib" "{{.*}}.o" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "-lc" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "{{.*}}crtend.o" "{{.*}}crtn.o"
+// RUN:   | FileCheck --check-prefix=CHECK-PPC64-PIE %s
 
 // CHECK-PPC64-PIE: "-cc1" "-triple" "powerpc64-pc-freebsd"
 // CHECK-PPC64-PIE: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]" "-pie"
@@ -81,8 +79,7 @@
 // RUN: %clang \
 // RUN:   --target=powerpc64le-unknown-freebsd13 %s \
 // RUN:   --sysroot=%S/Inputs/basic_freebsd64_tree -### 2>&1 \
-// RUN:   %if default-pie-on-freebsd %{ | FileCheck --check-prefix=CHECK-PPC64LE-PIE %s %} \
-// RUN:   %else %{ | FileCheck --check-prefix=CHECK-PPC64LE %s %}
+// RUN:   | FileCheck --check-prefix=CHECK-PPC64LE %s
 // CHECK-PPC64LE: "-cc1" "-triple" "powerpc64le-unknown-freebsd13"
 // CHECK-PPC64LE: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]"
 // CHECK-PPC64LE: "--eh-frame-hdr" "-dynamic-linker" "{{.*}}ld-elf{{.*}}" "-o" "a.out" "{{.*}}crt1.o" "{{.*}}crti.o" "{{.*}}crtbegin.o" "-L[[SYSROOT]]/usr/lib" "{{.*}}.o" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "-lc" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "{{.*}}crtend.o" "{{.*}}crtn.o"
@@ -204,14 +201,14 @@
 // RUN: %clang --target=x86_64-pc-freebsd -static %s \
 // RUN:   --sysroot=%S/Inputs/multiarch_freebsd64_tree -### 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-STATIC %s
-// CHECK-STATIC: ld{{.*}}" "--eh-frame-hdr" "-Bstatic"
-// CHECK-STATIC: crt1.o
+// CHECK-STATIC: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]" "--eh-frame-hdr" "-Bstatic"
+// CHECK-STATIC: "[[SYSROOT]]/usr/lib/crt1.o"
 // CHECK-STATIC: crtbeginT.o
 
 // RUN: %clang --target=x86_64-pc-freebsd -shared %s \
 // RUN:   --sysroot=%S/Inputs/multiarch_freebsd64_tree -### 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-SHARED %s
-// CHECK-SHARED: ld{{.*}}" "--eh-frame-hdr" "-shared"
+// CHECK-SHARED: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]" "--eh-frame-hdr" "-shared"
 // CHECK-SHARED: crti.o
 // CHECK-SHARED: crtbeginS.o
 
@@ -224,11 +221,7 @@
 
 // RUN: %clang --target=x86_64-pc-freebsd %s \
 // RUN:   --sysroot=%S/Inputs/multiarch_freebsd64_tree -### 2>&1 \
-// RUN:   %if default-pie-on-freebsd %{ | FileCheck --check-prefix=CHECK-NORMAL-PIE %s %} \
-// RUN:   %else %{ | FileCheck --check-prefix=CHECK-NORMAL %s %}
-// CHECK-NORMAL: crt1.o
-// CHECK-NORMAL: crtbegin.o
-
+// RUN:   | FileCheck --check-prefix=CHECK-NORMAL-PIE %s
 // CHECK-NORMAL-PIE: Scrt1.o
 // CHECK-NORMAL-PIE: crtbeginS.o
 
@@ -238,17 +231,22 @@
 // CHECK-NORMAL-NOPIE: crt1.o
 // CHECK-NORMAL-NOPIE: crtbegin.o
 
-/// Test -DCLANG_DEFAULT_PIE_ON_FREEBSD=on.
+/// PIE is the default on FreeBSD >= 13.1 and on unversioned triples.
 // RUN: %clang -### --target=x86_64-unknown-freebsd %s 2>&1 \
-// RUN:   %if default-pie-on-freebsd %{ | FileCheck --check-prefix=PIE2 %s %} \
-// RUN:   %else %{ | FileCheck --check-prefix=PIE2-OFF %s %}
+// RUN:   | FileCheck --check-prefix=PIE2 %s
+// RUN: %clang -### --target=x86_64-unknown-freebsd13.1 %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=PIE2 %s
 
 // PIE2: "-mrelocation-model" "pic" "-pic-level" "2" "-pic-is-pie"
 // PIE2: "-pie"
 
-// PIE2-OFF: "-mrelocation-model" "static"
-// PIE2-OFF-NOT: "-pic-is-pie"
-// PIE2-OFF-NOT: "-pie"
+/// Releases before 13.1 default to non-PIE.
+// RUN: %clang -### --target=x86_64-unknown-freebsd13.0 %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=PIE2-OLD %s
+
+// PIE2-OLD: "-mrelocation-model" "static"
+// PIE2-OLD-NOT: "-pic-is-pie"
+// PIE2-OLD-NOT: "-pie"
 
 // RUN: %clang -### %s --target=arm-unknown-freebsd10.0 -no-integrated-as 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-ARM %s

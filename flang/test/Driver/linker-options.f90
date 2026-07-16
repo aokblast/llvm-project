@@ -24,7 +24,7 @@
 ! RUN: %flang -target x86_64-pc-linux-gnu -no-pie -### %s 2>&1 \
 ! RUN:     | FileCheck %s --check-prefix=NO-PIE
 !
-! Ensure that "-pie" is passed to the linker.
+! Ensure that "-no-pie" suppresses "-pie".
 ! RUN: %flang -target i386-unknown-freebsd -no-pie -### %s 2>&1 \
 ! RUN:     | FileCheck %s --check-prefix=NO-PIE
 ! RUN: %flang -target aarch64-pc-linux-gnu -no-pie -### %s 2>&1 \
@@ -58,7 +58,7 @@
 ! RUN: %flang -target i386-pc-openbsd -pie -### %s 2>&1 \
 ! RUN:   | FileCheck %s --check-prefix=PIE
 !
-! On FreeBSD, -pie is not passed to the linker, but can be forced.
+! On FreeBSD, -pie is passed to the linker by default, but can be disabled.
 ! RUN: %flang -target amd64-pc-freebsd -### %s 2>&1 \
 ! RUN:   | FileCheck %s --check-prefix=PIE
 ! RUN: %flang -target i386-pc-freebsd -### %s 2>&1 \

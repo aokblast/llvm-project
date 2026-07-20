@@ -76,10 +76,8 @@
 // CHECK-PPC64-NOPIE: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]"
 // CHECK-PPC64-NOPIE: "--eh-frame-hdr" "-dynamic-linker" "{{.*}}ld-elf{{.*}}" "-o" "a.out" "{{.*}}crt1.o" "{{.*}}crti.o" "{{.*}}crtbegin.o" "-L[[SYSROOT]]/usr/lib" "{{.*}}.o" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "-lc" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "{{.*}}crtend.o" "{{.*}}crtn.o"
 
-// RUN: %clang \
-// RUN:   --target=powerpc64le-unknown-freebsd13 %s \
-// RUN:   --sysroot=%S/Inputs/basic_freebsd64_tree -### 2>&1 \
-// RUN:   | FileCheck --check-prefix=CHECK-PPC64LE %s
+// RUN: %clang -### --target=powerpc64le-unknown-freebsd13 %s --sysroot=%S/Inputs/basic_freebsd64_tree 2>&1 | \
+// RUN:   FileCheck --check-prefix=CHECK-PPC64LE %s
 // CHECK-PPC64LE: "-cc1" "-triple" "powerpc64le-unknown-freebsd13"
 // CHECK-PPC64LE: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]"
 // CHECK-PPC64LE: "--eh-frame-hdr" "-dynamic-linker" "{{.*}}ld-elf{{.*}}" "-o" "a.out" "{{.*}}crt1.o" "{{.*}}crti.o" "{{.*}}crtbegin.o" "-L[[SYSROOT]]/usr/lib" "{{.*}}.o" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "-lc" "-lgcc" "--as-needed" "-lgcc_s" "--no-as-needed" "{{.*}}crtend.o" "{{.*}}crtn.o"
@@ -168,7 +166,6 @@
 // RUN:   --sysroot=%S/Inputs/multiarch_freebsd64_tree -### 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-LDFLAGS_HASH %s
 // CHECK-LDFLAGS_HASH: --hash-style=both
-// CHECK-LDFLAGS_HASH: --enable-new-dtags
 //
 // Check that we do not pass --hash-style=gnu and --hash-style=both to linker
 // and provide correct path to the dynamic linker for MIPS platforms.
@@ -201,8 +198,8 @@
 // RUN: %clang --target=x86_64-pc-freebsd -static %s \
 // RUN:   --sysroot=%S/Inputs/multiarch_freebsd64_tree -### 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-STATIC %s
-// CHECK-STATIC: ld{{.*}}" "--sysroot=[[SYSROOT:[^"]+]]" "--eh-frame-hdr" "-Bstatic"
-// CHECK-STATIC: "[[SYSROOT]]/usr/lib/crt1.o"
+// CHECK-STATIC: ld{{.*}}" "--eh-frame-hdr" "-static"
+// CHECK-STATIC: crt1.o
 // CHECK-STATIC: crtbeginT.o
 
 // RUN: %clang --target=x86_64-pc-freebsd -shared %s \
@@ -247,6 +244,10 @@
 // PIE2-OLD: "-mrelocation-model" "static"
 // PIE2-OLD-NOT: "-pic-is-pie"
 // PIE2-OLD-NOT: "-pie"
+// RUN: %clang -### --target=x86_64-pc-freebsd12 %s --sysroot=%S/Inputs/multiarch_freebsd64_tree 2>&1 | \
+// RUN:   FileCheck --check-prefix=CHECK-NORMAL %s
+// CHECK-NORMAL: crt1.o
+// CHECK-NORMAL: crtbegin.o
 
 // RUN: %clang -### %s --target=arm-unknown-freebsd10.0 -no-integrated-as 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-ARM %s
@@ -301,13 +302,18 @@
 // RUN: FileCheck -check-prefix=PPC64-MUNWIND %s
 // PPC64-MUNWIND: "-funwind-tables=2"
 
-/// -r suppresses -dynamic-linker, default -l and crt*.o like -nostdlib.
-// RUN: %clang -### %s --target=aarch64-pc-freebsd11 -r \
+/// -r suppresses -pie, -export-dynamic, -dynamic-linker, --hash-style,
+/// default -l and crt*.o like -nostdlib.
+// RUN: %clang -### %s --target=x86_64-pc-freebsd11 -r -pie -rdynamic \
 // RUN:   --sysroot=%S/Inputs/basic_freebsd64_tree 2>&1 | FileCheck %s --check-prefix=RELOCATABLE
-// RELOCATABLE:     "-r"
+// RELOCATABLE:     ld{{.*}}" "--sysroot=
+// RELOCATABLE-NOT: "-pie"
+// RELOCATABLE-NOT: "-export-dynamic"
 // RELOCATABLE-NOT: "-dynamic-linker"
+// RELOCATABLE-NOT: "--hash-style=
 // RELOCATABLE-NOT: "-l
 // RELOCATABLE-NOT: crt{{[^./\\]+}}.o
+// RELOCATABLE:     "-r"
 
 // Check that the -X and --no-relax flags are passed to the linker on riscv64
 // RUN: %clang --target=riscv64-unknown-freebsd -mno-relax -### %s 2>&1 \

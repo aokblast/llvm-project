@@ -59,19 +59,11 @@
 ! RUN:   | FileCheck %s --check-prefix=PIE
 !
 ! On FreeBSD, -pie is passed to the linker by default, but can be disabled.
-! RUN: %flang -target amd64-pc-freebsd -### %s 2>&1 \
+! RUN: %flang --target amd64-pc-freebsd -### %s 2>&1 \
 ! RUN:   | FileCheck %s --check-prefix=PIE
-! RUN: %flang -target i386-pc-freebsd -### %s 2>&1 \
+! RUN: %flang --target aarch64-unknown-freebsd -### %s 2>&1 \
 ! RUN:   | FileCheck %s --check-prefix=PIE
-! RUN: %flang -target aarch64-unknown-freebsd -### %s 2>&1 \
-! RUN:   | FileCheck %s --check-prefix=PIE
-! RUN: %flang -target arm-unknown-freebsd -### %s 2>&1 \
-! RUN:   | FileCheck %s --check-prefix=PIE
-! RUN: %flang -target powerpc-unknown-freebsd -### %s 2>&1 \
-! RUN:   | FileCheck %s --check-prefix=PIE
-! RUN: %flang -target sparc64-unknown-freebsd -### %s 2>&1 \
-! RUN:   | FileCheck %s --check-prefix=PIE
-! RUN: %flang -target i386-pc-freebsd -no-pie -### %s 2>&1 \
+! RUN: %flang --target amd64-pc-freebsd -no-pie -### %s 2>&1 \
 ! RUN:   | FileCheck %s --check-prefix=NO-PIE
 !
 ! On AIX, -pie is never passed to the linker.

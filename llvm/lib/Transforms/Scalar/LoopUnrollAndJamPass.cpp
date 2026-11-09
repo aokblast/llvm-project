@@ -215,8 +215,10 @@ static unsigned computeReuseCount(const ScalarOptions &Opts, Loop *L,
     return 0;
   }
 
-  if (HasInvariantLoad || !AllowRemainder)
+  if (!AllowRemainder)
     return Count;
+  if (HasInvariantLoad)
+    return llvm::bit_floor(Count);
   return ReuseCount;
 }
 
@@ -258,6 +260,8 @@ static unsigned computeUnrollAndJamCount(
   // unrolling the outer loop. This uses UP.Threshold / UP.PartialThreshold /
   // UP.MaxCount to come up with sensible loop values.
   // We have already checked that the loop has no unroll.* pragmas.
+  if (!Opts.unroll_partial_threshold)
+    UP.PartialThreshold = std::max(UP.PartialThreshold, UP.Threshold);
   unsigned Count =
       computeUnrollCount(L, TTI, DT, LI, AC, SE, EphValues, ORE, OuterTripCount,
                          /*MaxTripCount*/ 0, /*MaxOrZero*/ false,

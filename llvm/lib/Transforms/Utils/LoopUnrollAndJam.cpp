@@ -47,6 +47,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
 #include "llvm/Transforms/Utils/UnrollLoop.h"
@@ -590,6 +591,13 @@ llvm::UnrollAndJamLoop(Loop *L, unsigned Count, unsigned TripCount,
   if (CompletelyUnroll) {
     LI->erase(L);
     L = nullptr;
+  }
+
+  if (Count > 1) {
+    SmallVector<WeakTrackingVH, 16> DeadInsts;
+    SCEVExpander Rewriter(*SE, "unroll-and-jam");
+    if (Rewriter.replaceCongruentIVs(SubLoop, DT, DeadInsts, TTI))
+      RecursivelyDeleteTriviallyDeadInstructionsPermissive(DeadInsts);
   }
 
   // At this point, the code is well formed.  We now do a quick sweep over the
